@@ -10,13 +10,11 @@ if not TOKEN:
     raise ValueError("BOT_TOKEN environment variable not set.")
 
 VALID_MEALS = ["breakfast", "lunch", "snacks", "dinner"]
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MENU_FILE = os.path.join(BASE_DIR, "menu.xlsx")
 
-
 # ---------------- MENU LOADING ----------------
-def build_menu():
+def load_menu():
     try:
         df = pd.read_excel(MENU_FILE)
         df.columns = df.columns.str.strip()
@@ -35,15 +33,9 @@ def build_menu():
                 "dinner": str(row["Dinner"]).strip(),
             }
         return menu
-
     except Exception as e:
         print("ERROR loading Excel:", e)
         return {}
-
-
-menu_data = build_menu()
-VALID_DAYS = list(menu_data.keys())
-
 
 # ---------------- SAFE REPLY ----------------
 async def safe_reply(update: Update, message: str):
@@ -51,7 +43,6 @@ async def safe_reply(update: Update, message: str):
         await update.message.reply_text(message, parse_mode="Markdown")
     except:
         await update.message.reply_text(message)
-
 
 # ---------------- COMMAND HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,7 +55,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Or type: monday breakfast"
     )
 
-
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_reply(update,
         "Usage Guide:\n\n"
@@ -74,8 +64,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Valid meals: {', '.join(VALID_MEALS)}"
     )
 
-
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    menu_data = load_menu()  # reload menu on each command
     if not menu_data:
         await safe_reply(update, "Menu data not available.")
         return
@@ -83,21 +73,20 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if today_day not in menu_data:
         await safe_reply(update, "No menu found for today.")
         return
-    await send_full_day(update, today_day)
-
+    await send_full_day(update, today_day, menu_data)
 
 async def day_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    menu_data = load_menu()
     if not context.args:
         await safe_reply(update, "Usage: /day monday")
         return
     day = context.args[0].lower()
-    if day not in VALID_DAYS:
-        await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(VALID_DAYS)}")
+    if day not in menu_data:
+        await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(menu_data.keys())}")
         return
-    await send_full_day(update, day)
+    await send_full_day(update, day, menu_data)
 
-
-async def send_full_day(update: Update, day: str):
+async def send_full_day(update: Update, day: str, menu_data):
     data = menu_data.get(day)
     if not data:
         await safe_reply(update, "Menu not available.")
@@ -111,9 +100,9 @@ async def send_full_day(update: Update, day: str):
     )
     await safe_reply(update, response)
 
-
 # ---------------- MESSAGE HANDLER ----------------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    menu_data = load_menu()
     if not menu_data:
         await safe_reply(update, "Menu data is not loaded properly.")
         return
@@ -125,8 +114,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     words = text.split()
     if len(words) == 1:
-        if words[0] in VALID_DAYS:
-            await send_full_day(update, words[0])
+        if words[0] in menu_data:
+            await send_full_day(update, words[0], menu_data)
         elif words[0] in VALID_MEALS:
             await safe_reply(update, "Please specify the day.\nExample: monday breakfast")
         else:
@@ -135,8 +124,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(words) >= 2:
         day, meal = words[0], words[1]
-        if day not in VALID_DAYS:
-            await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(VALID_DAYS)}")
+        if day not in menu_data:
+            await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(menu_data.keys())}")
             return
         if meal not in VALID_MEALS:
             await safe_reply(update, f"Invalid meal.\nValid meals: {', '.join(VALID_MEALS)}")
@@ -151,7 +140,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await safe_reply(update, "Invalid format. Type /help for usage.")
 
-
 # ---------------- RUN BOT ----------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -164,7 +152,6 @@ def main():
 
     print("Bot running with polling...")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
