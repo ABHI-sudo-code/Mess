@@ -5,15 +5,12 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ---------------- CONFIG ----------------
-# Get token from environment variable
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN environment variable not set.")
 
-# Valid meals
 VALID_MEALS = ["breakfast", "lunch", "snacks", "dinner"]
 
-# Base directory for menu.xlsx
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MENU_FILE = os.path.join(BASE_DIR, "menu.xlsx")
 
@@ -49,7 +46,7 @@ VALID_DAYS = list(menu_data.keys())
 
 
 # ---------------- SAFE REPLY ----------------
-async def safe_reply(update, message):
+async def safe_reply(update: Update, message: str):
     try:
         await update.message.reply_text(message, parse_mode="Markdown")
     except:
@@ -59,7 +56,7 @@ async def safe_reply(update, message):
 # ---------------- COMMAND HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_reply(update,
-        "Welcome to Mess Menu Bot\n\n"
+        "Welcome to Mess Menu Bot!\n\n"
         "Commands:\n"
         "/today → Full menu for today\n"
         "/day monday → Full menu for a day\n"
@@ -74,7 +71,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Get today's menu → /today\n"
         "• Get full menu → /day monday\n"
         "• Get specific meal → monday lunch\n\n"
-        "Valid meals: breakfast, lunch, snacks, dinner"
+        f"Valid meals: {', '.join(VALID_MEALS)}"
     )
 
 
@@ -95,7 +92,7 @@ async def day_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     day = context.args[0].lower()
     if day not in VALID_DAYS:
-        await safe_reply(update, f"Invalid day.\nAvailable days:\n{', '.join(VALID_DAYS)}")
+        await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(VALID_DAYS)}")
         return
     await send_full_day(update, day)
 
@@ -139,10 +136,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(words) >= 2:
         day, meal = words[0], words[1]
         if day not in VALID_DAYS:
-            await safe_reply(update, f"Invalid day.\nAvailable days:\n{', '.join(VALID_DAYS)}")
+            await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(VALID_DAYS)}")
             return
         if meal not in VALID_MEALS:
-            await safe_reply(update, f"Invalid meal.\nValid meals:\n{', '.join(VALID_MEALS)}")
+            await safe_reply(update, f"Invalid meal.\nValid meals: {', '.join(VALID_MEALS)}")
             return
         response = menu_data[day].get(meal)
         if not response or response.lower() == "nan":
@@ -156,15 +153,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------- RUN BOT ----------------
-app = ApplicationBuilder().token(TOKEN).build()
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(CommandHandler("today", today))
-app.add_handler(CommandHandler("day", day_command))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("today", today))
+    app.add_handler(CommandHandler("day", day_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-print("Bot running with polling...")
+    print("Bot running with polling...")
+    app.run_polling()
 
-# Use polling (simplest for Render)
-app.run_polling()
+
+if __name__ == "__main__":
+    main()
