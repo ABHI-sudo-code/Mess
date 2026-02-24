@@ -159,7 +159,7 @@ print("Bot running with webhook...")
 PORT = int(os.environ.get("PORT", 8443))
 
 # Replace 'your-app-name' with your Render service name
-RENDER_URL = f"https://mess-1.onrender.com/{TOKEN}"
+RENDER_URL = f"https://mess-1-3z8v.onrender.com/{TOKEN}"
 
 # Run webhook
 app.run_webhook(
