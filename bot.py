@@ -9,12 +9,15 @@ TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN environment variable not set.")
 
+# Valid meals
 VALID_MEALS = ["breakfast", "lunch", "snacks", "dinner"]
+
+# Base directory for menu.xlsx
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MENU_FILE = os.path.join(BASE_DIR, "menu.xlsx")
 
 # ---------------- MENU LOADING ----------------
-def load_menu():
+def build_menu():
     try:
         df = pd.read_excel(MENU_FILE)
         df.columns = df.columns.str.strip()
@@ -33,12 +36,16 @@ def load_menu():
                 "dinner": str(row["Dinner"]).strip(),
             }
         return menu
+
     except Exception as e:
         print("ERROR loading Excel:", e)
         return {}
 
+menu_data = build_menu()
+VALID_DAYS = list(menu_data.keys())
+
 # ---------------- SAFE REPLY ----------------
-async def safe_reply(update: Update, message: str):
+async def safe_reply(update, message):
     try:
         await update.message.reply_text(message, parse_mode="Markdown")
     except:
@@ -47,7 +54,7 @@ async def safe_reply(update: Update, message: str):
 # ---------------- COMMAND HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_reply(update,
-        "Welcome to Mess Menu Bot!\n\n"
+        "Welcome to Mess Menu Bot\n\n"
         "Commands:\n"
         "/today → Full menu for today\n"
         "/day monday → Full menu for a day\n"
@@ -61,11 +68,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Get today's menu → /today\n"
         "• Get full menu → /day monday\n"
         "• Get specific meal → monday lunch\n\n"
-        f"Valid meals: {', '.join(VALID_MEALS)}"
+        "Valid meals: breakfast, lunch, snacks, dinner"
     )
 
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    menu_data = load_menu()  # reload menu on each command
     if not menu_data:
         await safe_reply(update, "Menu data not available.")
         return
@@ -73,20 +79,19 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if today_day not in menu_data:
         await safe_reply(update, "No menu found for today.")
         return
-    await send_full_day(update, today_day, menu_data)
+    await send_full_day(update, today_day)
 
 async def day_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    menu_data = load_menu()
     if not context.args:
         await safe_reply(update, "Usage: /day monday")
         return
     day = context.args[0].lower()
-    if day not in menu_data:
-        await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(menu_data.keys())}")
+    if day not in VALID_DAYS:
+        await safe_reply(update, f"Invalid day.\nAvailable days:\n{', '.join(VALID_DAYS)}")
         return
-    await send_full_day(update, day, menu_data)
+    await send_full_day(update, day)
 
-async def send_full_day(update: Update, day: str, menu_data):
+async def send_full_day(update: Update, day: str):
     data = menu_data.get(day)
     if not data:
         await safe_reply(update, "Menu not available.")
@@ -102,7 +107,6 @@ async def send_full_day(update: Update, day: str, menu_data):
 
 # ---------------- MESSAGE HANDLER ----------------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    menu_data = load_menu()
     if not menu_data:
         await safe_reply(update, "Menu data is not loaded properly.")
         return
@@ -114,8 +118,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     words = text.split()
     if len(words) == 1:
-        if words[0] in menu_data:
-            await send_full_day(update, words[0], menu_data)
+        if words[0] in VALID_DAYS:
+            await send_full_day(update, words[0])
         elif words[0] in VALID_MEALS:
             await safe_reply(update, "Please specify the day.\nExample: monday breakfast")
         else:
@@ -124,11 +128,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(words) >= 2:
         day, meal = words[0], words[1]
-        if day not in menu_data:
-            await safe_reply(update, f"Invalid day.\nAvailable days: {', '.join(menu_data.keys())}")
+        if day not in VALID_DAYS:
+            await safe_reply(update, f"Invalid day.\nAvailable days:\n{', '.join(VALID_DAYS)}")
             return
         if meal not in VALID_MEALS:
-            await safe_reply(update, f"Invalid meal.\nValid meals: {', '.join(VALID_MEALS)}")
+            await safe_reply(update, f"Invalid meal.\nValid meals:\n{', '.join(VALID_MEALS)}")
             return
         response = menu_data[day].get(meal)
         if not response or response.lower() == "nan":
@@ -140,18 +144,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await safe_reply(update, "Invalid format. Type /help for usage.")
 
-# ---------------- RUN BOT ----------------
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+# ---------------- RUN BOT WITH WEBHOOK ----------------
+app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("today", today))
-    app.add_handler(CommandHandler("day", day_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("help", help_command))
+app.add_handler(CommandHandler("today", today))
+app.add_handler(CommandHandler("day", day_command))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Bot running with polling...")
-    app.run_polling()
+print("Bot running with webhook...")
 
-if __name__ == "__main__":
-    main()
+# Render free service port
+PORT = int(os.environ.get("PORT", 8443))
+
+# Replace 'your-app-name' with your Render service name
+RENDER_URL = f"https://mess-1.onrender.com/{TOKEN}"
+
+# Run webhook
+app.run_webhook(
+    listen="0.0.0.0",
+    port=PORT,
+    url_path=TOKEN,
+    webhook_url=RENDER_URL
+)
